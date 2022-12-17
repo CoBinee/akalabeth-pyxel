@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "06d2cbca8fd888aeebfdb5b70627caa9a1911b6b068a4442265b7d99a726adbe"
+            "sha256": "adf6ace1b7f6fdfd7a5c2a84b66b191b5af65e66044cace8e1f958ac1b9dfb4b"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -16,16 +16,17 @@
         ]
     },
     "default": {
-        "lark-parser": {
+        "lark": {
             "hashes": [
-                "sha256:e29ca814a98bb0f81674617d878e5f611cb993c19ea47f22c80da3569425f9bd"
+                "sha256:4b534eae1f9af5b4ea000bea95776350befe1981658eea3820a01c37e504bb4d",
+                "sha256:8476f9903e93fbde4f6c327f74d79e9b4bd0ed9294c5dfa3164ab8c581b5de2a"
             ],
             "index": "pypi",
-            "version": "==0.11.3"
+            "version": "==1.1.5"
         },
         "pyxel": {
-            "path": "./../../pyxel-master",
-            "version": "==1.4.3"
+            "path": "./../../pyxel-main_1.8.5",
+            "version": "==1.8.5"
         }
     },
     "develop": {}

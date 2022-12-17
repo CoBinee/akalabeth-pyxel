@@ -4,8 +4,8 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-lark-parser = "*"
-pyxel = {path = "./../../pyxel-master"}
+pyxel = {path = "./../../pyxel-main_1.8.5"}
+lark = "*"
 
 [dev-packages]
 
