@@ -1,4 +1,4 @@
-# akalabeth.py - Akalabeth: World of Doom!
+# akar.py - Applesoft Basic Runner
 #
 
 
@@ -11,16 +11,12 @@ import math
 import random
 import argparse
 import json
-from lark import Lark
-from lark import Tree
-from lark import Token
-from lark import Transformer
 import pyxel
 
 
 # Applesoft Basic クラス
 #
-class ApplesoftBasic(Transformer):
+class ApplesoftBasic:
 
     # コンストラクタ
     def __init__(self):
@@ -31,15 +27,15 @@ class ApplesoftBasic(Transformer):
         self._path = None
 
         # リストの初期化
-        self._lines = dict()
-        self._lists = dict()
+        ## self._lines = dict()
+        ## self._lists = dict()
         self._start = -1
 
         # 変数宣言の初期化
         self._dims = dict()
 
-        # ツリーの初期化
-        self._trees = dict()
+        ### ツリーの初期化
+        ##self._trees = dict()
 
         # 中間コードの初期化
         self._codes = dict()
@@ -192,365 +188,45 @@ class ApplesoftBasic(Transformer):
         self._path = path
 
         # ファイルの読み込み
-        if not self._load():
-            exit()
-
-        # リストの解析
-        if not self._parse():
-            exit()
-
-        # 中間コードの生成
-        if not self._compile():
+        if not self._import():
             exit()
 
         # 中間コードの実行
         if not self._execute(speed):
             exit()
 
-    # コンパイル結果を出力する
-    def export(self, code_path, indent):
-
-        # json の作成
-        basic_json = {}
-        basic_json['code'] = self._codes
-        basic_json['data'] = self._datas
+    # .json ファイルを読み込む
+    def _import(self):
 
         # .json ファイルの操作
         try:
 
             # .json ファイルを開く
-            code_file = open(code_path, mode='w', encoding='utf8')
+            json_file = open(self._path, mode='r', encoding='utf8')
 
-            # .json ファイルを書き出す
-            json.dump(basic_json, code_file, indent=indent, ensure_ascii=False)
+            # .json ファイルを読み込む
+            json_text = json_file.read()
+            json_data = json.loads(json_text)
+            for number_key, number_value in json_data['code'].items():
+                number = int(number_key)
+                if number not in self._codes:
+                    self._codes[number] = dict()
+                for statement_key, statement_value in number_value.items():
+                    statement = int(statement_key)
+                    self._codes[number][statement] = statement_value
+            self._datas = json_data['data']
+            self._start = 0
 
             # .json ファイルを閉じる
-            code_file.close()
+            json_file.close()
 
         # エラー
         except Exception as e:
-            print('export error:\n' + str(e), file=sys.stderr)
-
-    # ファイルを読み込む
-    def _load(self):
-
-        # ファイルの読み込み
-        try:
-            with open(self._path, 'r', encoding='UTF-8') as file:
-                last = -1
-                for line in file:
-                    match = re.match(r'^\s*(\d+)\s*(.*)\n?$', line)
-                    if match is not None:
-                        number = int(match.group(1))
-                        self._lines[number] = match.group(2)
-                        if self._start < 0 or self._start > number:
-                            self._start = number
-                        last = number
-
-        # 例外
-        except Exception as e:
-            sys.stderr.write('{0}\n'.format(e))
+            print('import error:\n' + str(e), file=sys.stderr)
             return False
 
-        # 読み込みの完了
-        finally:
-            pass
-
-        # ステートメント毎に分割
-        for number in self._lines.keys():
-            line = self._lines[number]
-            statement = 0
-            head = 0
-            length = len(line)
-            while head < length:
-                while head < length and (line[head] == ' ' or line[head] == '\t'):
-                    head = head + 1
-                if head < length:
-                    if re.match(r'(?i)^rem', line[head:]) is not None:
-                        head = length
-                    elif re.match(r'(?i)^(hi|lo)mem:', line[head:]) is not None:
-                        head = head + 6
-                        while head < length and line[head] != ':':
-                            head = head + 1
-                        head = head + 1
-                    elif re.match(r'(?i)^(onerr|resume|pr#|in#|fre|pdl|pos|scrn)', line[head:]) is not None:
-                        while head < length and line[head] != ':':
-                            head = head + 1
-                        head = head + 1
-                    else:
-                        tail = head
-                        while tail < length and line[tail] != ':':
-                            if line[tail] == '"':
-                                tail = tail + 1
-                                while tail < length and line[tail] != '"':
-                                    tail = tail + 1
-                                if tail < length:
-                                    tail = tail + 1
-                            elif line[tail] == "'":
-                                tail = tail + 1
-                                while tail < length and line[tail] != "'":
-                                    tail = tail + 1
-                                if tail < length:
-                                    tail = tail + 1
-                            else:
-                                tail = tail + 1
-                        if number not in self._lists:
-                            self._lists[number] = dict()
-                        self._lists[number][statement] = line[head:tail]
-                        statement = statement + 1
-                        head = tail + 1
-
         # 終了
         return True
-
-    # リストを解析する
-    def _parse(self):
-
-        # Lark による解析
-        try:
-
-            # 文法の定義
-            lark = Lark(r'''
-                statement           :   command_clear
-                                    |   command_let
-                                    |   command_dim
-                                //  |   command_def
-                                    |   command_goto
-                                    |   command_gosub
-                                    |   command_return
-                                    |   command_on_goto
-                                    |   command_on_gosub
-                                //  |   command_pop
-                                    |   command_for
-                                    |   command_next
-                                    |   command_if
-                                    |   command_stop
-                                //  |   command_onerr
-                                //  |   command_resume
-                                    |   command_print
-                                    |   command_input
-                                    |   command_get
-                                    |   command_home
-                                    |   command_htab
-                                    |   command_vtab
-                                    |   command_inverse
-                                //  |   command_flash
-                                    |   command_normal
-                                    |   command_text
-                                    |   command_hgr
-                                    |   command_hplot
-                                    |   command_hcolor
-                                    |   command_data
-                                    |   command_read
-                                    |   command_restore
-                                    |   command_poke
-                                    |   command_call
-                                //  |   command_pr
-                                //  |   command_in
-                command_clear       :   "CLEAR"i
-                command_let         :   ("LET"i)? let ("," let)*
-                let                 :   variable_number "=" expression
-                                    |   variable_string "=" sentence
-                command_dim         :   "DIM"i (variable_number | variable_string) ("," (variable_number | variable_string))*
-            //  command_def         :   "DEF"i "FN"i ...
-                command_goto        :   ("GOTO"i)? expression
-                command_gosub       :   "GOSUB"i expression
-                command_return      :   "RETURN"i
-                command_on_goto     :   "ON"i expression "GOTO"i expression ("," expression)*
-                command_on_gosub    :   "ON"i expression "GOSUB"i expression ("," expression)*
-            //  command_pop         :   "POP"i
-                command_for         :   "FOR"i variable_number "=" expression "TO"i expression ("STEP"i expression)?
-                command_next        :   "NEXT"i variable_number?
-                command_if          :   "IF"i expression ("THEN"i)? statement
-                command_stop        :   "STOP"i
-                                    |   "END"i
-            //  command_onerr       |   "ONERR"i "GOTO"i ...
-            //  command_resume      |   "RESUME" ...
-                command_print       :   "PRINT"i (expression | sentence | SEMICOLON | COMMA)*
-                command_input       :   "INPUT"i (sentence ";")? (variable_number | variable_string)
-                command_get         :   "GET"i (variable_number | variable_string)
-                command_home        :   "HOME"i
-                command_htab        :   "HTAB"i expression
-                command_vtab        :   "VTAB"i expression
-                command_inverse     :   "INVERSE"i
-            //  command_flash       :   "FLASH"i
-                command_normal      :   "NORMAL"i
-                command_text        :   "TEXT"i
-                command_hgr         :   "HGR"i
-                command_hplot       :   "HPLOT"i ("TO"i)? expression "," expression ("TO"i expression "," expression)*
-                command_hcolor      :   "HCOLOR"i "=" expression
-                command_data        :   "DATA"i (expression | sentence) ("," (expression | sentence))*
-                command_read        :   "READ"i (variable_number | variable_string) ("," (variable_number | variable_string))*
-                command_restore     :   "RESTORE"i
-            //  command_pr          :   "PR#"i ...
-            //  command_in          :   "IN#"i ...
-                command_poke        :   "POKE"i expression "," expression
-                command_call        :   "CALL"i expression
-                function_abs        :   "ABS"i "(" expression ")"
-                function_atn        :   "ATN"i "(" expression ")"
-                function_cos        :   "COS"i "(" expression ")"
-                function_exp        :   "EXP"i "(" expression ")"
-                function_int        :   "INT"i "(" expression ")"
-                function_log        :   "LOG"i "(" expression ")"
-                function_rnd        :   "RND"i "(" expression ")"
-                function_sgn        :   "SGN"i "(" expression ")"
-                function_sin        :   "SIN"i "(" expression ")"
-                function_sqr        :   "SQR"i "(" expression ")"
-                function_tan        :   "TAN"i "(" expression ")"
-                function_len        :   "LEN"i "(" sentence ")"
-                function_left       :   "LEFT$"i "(" sentence "," expression ")"
-                function_mid        :   "MID$"i "(" sentence "," expression ("," expression)? ")"
-                function_right      :   "RIGHT$"i "(" sentence "," expression ")"
-                function_asc        :   "ASC"i "(" sentence ")"
-                function_chr        :   "CHR$"i "(" expression ")"
-                function_str        :   "STR$"i "(" expression ")"
-                function_val        :   "VAL"i "(" sentence ")"
-                function_peek       :   "PEEK"i "(" expression ")"
-                expression          :   logical_or
-                logical_or          :   logical_and
-                                    |   logical_or "OR"i logical_and
-                logical_and         :   compare
-                                    |   logical_and "AND"i compare
-                compare             :   sum
-                                    |   sum ">" sum  -> greater
-                                    |   sum ">=" sum -> greater_equal
-                                    |   sum "=>" sum -> greater_equal
-                                    |   sum "<" sum  -> less
-                                    |   sum "<=" sum -> less_equal
-                                    |   sum "=<" sum -> less_equal
-                                    |   sum "=" sum  -> equal
-                                    |   sum "<>" sum -> not_equal
-                                    |   sum "><" sum -> not_equal
-                                    |   sentence "=" sentence -> equal
-                                    |   sentence "<>" sentence -> not_equal
-                                    |   sentence "><" sentence -> not_equal
-                sum                 :   product
-                                    |   sum "+" product -> addition
-                                    |   sum "-" product -> subtraction
-                product             :   exponent
-                                    |   product "*" exponent -> multiply
-                                    |   product "/" exponent -> division
-                exponent            :   atom
-                                    |   exponent "^" atom -> power
-                atom                :   positive
-                                    |   negative
-                                    |   negation
-                                    |   "(" expression ")"
-                positive            :   "+"? factor
-                negative            :   "-" factor
-                negation            :   "NOT"i factor
-                factor              :   NUMBER
-                                    |   variable_number
-                                    |   function_abs
-                                    |   function_atn
-                                    |   function_cos
-                                    |   function_exp
-                                    |   function_int
-                                    |   function_log
-                                    |   function_rnd
-                                    |   function_sgn
-                                    |   function_sin
-                                    |   function_sqr
-                                    |   function_tan
-                                    |   function_len
-                                    |   function_asc
-                                    |   function_val
-                                    |   function_peek
-                sentence            :   term
-                                    |   sentence "+" term -> strcat
-                term                :   STRING
-                                    |   variable_string
-                                    |   function_left
-                                    |   function_mid
-                                    |   function_right
-                                    |   function_chr
-                                    |   function_str
-                variable_number     :   (NAME_INTEGER | NAME_REAL) ("(" expression ("," expression)? ")")?
-                variable_string     :   NAME_STRING ("(" expression ("," expression)? ")")?
-                NAME_REAL           :   /[A-Za-z][A-Za-z0-9]*/
-                NAME_INTEGER        :   /[A-Za-z][A-Za-z0-9]*%/
-                NAME_STRING         :   /[A-Za-z][A-Za-z0-9]*\$/
-                NUMBER              :   /[0-9]+(\.[0-9]+)?|\.[0-9]+/
-                STRING              :   /[\"][^\"]*[\"]|[\'][^\']*[\']|[\"][^\"]*$|[\'][^\']*$/
-                SEMICOLON           :   ";"
-                COMMA               :   ","
-                %import common (WS)
-                %ignore WS
-            ''', parser='lalr', start='statement')
-
-            # リストの解析
-            self._log(f'parse...', level=0)
-            for number in self._lists.keys():
-                count = 0
-                for statement in self._lists[number].keys():
-                    if number not in self._trees:
-                        self._trees[number] = dict()
-                    self._log(f'[{number}, {statement}] {self._lists[number][statement]}', level=0)
-                    if len(self._lists[number][statement]) > 0:
-                        tree = lark.parse(self._lists[number][statement])
-                        if tree.data == 'statement':
-                            if tree.children[0].data == 'command_if':
-                                self._trees[number][count] = Tree('statement', [Tree('command_if', [tree.children[0].children[0]])])
-                                count = count + 1
-                                self._trees[number][count] = tree.children[0].children[1]
-                                count = count + 1
-                            elif tree.children[0].data == 'command_data':
-                                for child in tree.children[0].children:
-                                    value = None
-                                    sign = 1
-                                    while value is None:
-                                        if type(child) is Tree:
-                                            if child.data == 'negative':
-                                                sign = -1
-                                            child = child.children[0]
-                                        elif type(child) is Token:
-                                            if child.type == 'NUMBER':
-                                                value = float(child.value) * sign
-                                            else:
-                                                value = child.value[1:len(child.value) - 1]
-                                    self._datas.append(value)
-                                self._trees[number][count] = tree
-                                count = count + 1
-                            else:
-                                self._trees[number][count] = tree
-                                count = count + 1
-
-        # 例外
-        except Exception as e:
-            sys.stderr.write('{0}\n'.format(e))
-            return False
-
-        # 解析の完了
-        finally:
-            pass
-
-        # 終了
-        return True
-
-    # 中間コードを生成する
-    def _compile(self):
-
-        # 順に処理する
-        self._log(f'compile...', level=0)
-        for self._code_number, statements in self._trees.items():
-            for self._code_statement, tree in statements.items():
-                self._log(f'[{self._code_number}, {self._code_statement}] {tree} ', level=0)
-                if self._code_number not in self._codes:
-                    self._codes[self._code_number] = dict()
-                if self._code_statement not in self._codes[self._code_number]:
-                    self._codes[self._code_number][self._code_statement] = list()
-                try:
-                    self.transform(tree)
-                except Exception as e:
-                    sys.stderr.write('{0}\n'.format(e))
-                    return False
-
-        # 終了
-        return True
-
-    # 中間コードを追加する
-    def _add_code(self, *args):
-        self._codes[self._code_number][self._code_statement].append(args)
 
     # 中間コードの実行する
     def _execute(self, speed):
@@ -2485,8 +2161,8 @@ class ApplesoftBasic(Transformer):
 # Basic の宣言
 #
 applesoftbasic = None
-basicfile = ['./AKA0', './AKA6']
-basicstep = 0
+jsonfile = ['./AKA0.json', './AKA6.json']
+jsonstep = 0
 
 # Pyxel の更新を行う
 #
@@ -2494,22 +2170,22 @@ def update():
 
     # グローバル宣言
     global applesoftbasic
-    global basicfile
-    global basicstep
+    global jsonfile
+    global jsonstep
 
     # ApplesoftBasic の生成
     if applesoftbasic is None:
         applesoftbasic = ApplesoftBasic()
-        applesoftbasic.ready(basicfile[basicstep])
+        applesoftbasic.ready(jsonfile[jsonstep])
 
     # ApplesoftBasic の更新
     if applesoftbasic is not None:
         result = applesoftbasic.update()
         if not result:
             applesoftbasic = None
-            basicstep = basicstep + 1
-            if basicstep >= len(basicfile):
-                basicstep = 0
+            jsonstep = jsonstep + 1
+            if jsonstep >= len(jsonfile):
+                jsonstep = 0
 
 # Pyxel の描画を行う
 #
